@@ -38,29 +38,39 @@ int transition(int pipe1, int pipe2, char *destination, int offset, char color)
 {
     close(pipe2);
     // On ouvre les fichiers.
-    int dest_gris = open(destination, O_WRONLY | O_CREAT | O_TRUNC, S_IRWXU);
-    if (dest_gris == -1)
+    int dest = open(destination, O_WRONLY | O_CREAT | O_TRUNC, S_IRWXU);
+    if (dest == -1)
     {
         perror("Error open dst gray");
         return EXIT_FAILURE;
     }
-
-    // On utilise pas de lseek puisqu'on a fermé et réouvert le fichier (suite à l'utilisation de fonctions), donc on repart du début et on read/write en une fois.
-    char temp_char[offset];
-    if (read(pipe1, &temp_char, sizeof(char) * offset) != sizeof(char) * offset)
+    // On utilise pas de lseek puisqu'on change de fichier et qu'on a donc fermé et réouvert les fichiers.
+    char temp_char;
+    // On recopie l'entête.
+    for (int i = 0; i < offset; ++i)
     {
-        perror("Error read");
-        return EXIT_FAILURE;
+        if (read(pipe1, &temp_char, sizeof(char)) != sizeof(char))
+        {
+            perror("Error read");
+            return EXIT_FAILURE;
+        }
+        if (write(dest, &temp_char, sizeof(char)) != sizeof(char))
+        {
+            perror("Error write");
+            return EXIT_FAILURE;
+        }
     }
-    if (write(dest_gris, &temp_char, sizeof(char) * offset) != sizeof(char) * offset)
-    {
-        perror("Error write");
-        return EXIT_FAILURE;
-    }
 
-    unsigned char pixels[3];
-    while (read(pipe1, pixels, sizeof(unsigned char) * 3) > 0)
+    unsigned char pixel_R;
+    unsigned char pixel_G;
+    unsigned char pixel_B;
+    while (read(pipe1, &pixel_R, sizeof(unsigned char)) > 0 && read(pipe1, &pixel_G, sizeof(unsigned char)) > 0 && read(pipe1, &pixel_B, sizeof(unsigned char)) > 0)
     {
+        // On récupère les trois pixels et on les traitent.
+        unsigned char pixels[3];
+        pixels[0] = pixel_R;
+        pixels[1] = pixel_G;
+        pixels[2] = pixel_B;
         switch (color)
         {
         case 'N':
@@ -80,8 +90,7 @@ int transition(int pipe1, int pipe2, char *destination, int offset, char color)
             return EXIT_FAILURE;
             break;
         }
-
-        if (write(dest_gris, pixels, sizeof(unsigned char) * 3) == -1)
+        if (write(dest, pixels, sizeof(unsigned char) * 3) != 3)
         {
             perror("Error write grey");
             return EXIT_FAILURE;
@@ -90,14 +99,14 @@ int transition(int pipe1, int pipe2, char *destination, int offset, char color)
     close(pipe1);
 
     // On ferme les fichiers.
-    close(dest_gris);
+    close(dest);
     return EXIT_SUCCESS;
 }
 
 int main(int argc, char **argv)
 {
-    int tube1 = atoi(argv[1]);
-    int tube2 = atoi(argv[2]);
+    int tube1 = atoi(argv[1]); // p[0]
+    int tube2 = atoi(argv[2]); // p[1]
     int offset = atoi(argv[3]);
     char name_destination[1024];
     switch (argv[4][0])

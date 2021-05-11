@@ -24,12 +24,12 @@ bool file_exists(char *nom)
 int reading_header(char *nom, bmp_t *bitmap)
 {
     int fichier = open(nom, O_RDONLY); // On ouvre le fichier à recopier.
-    if (fichier == -1)
+    if (fichier == -1) // On vérifie l'ouverture.
     {
         perror("Error open src");
         return EXIT_FAILURE;
     }
-    if (read(fichier, bitmap, sizeof(bmp_t)) != sizeof(bmp_t)) // On lit le fichier source
+    if (read(fichier, bitmap, sizeof(bmp_t)) != sizeof(bmp_t)) // On lit l'entête du fichier source
     {
         perror("Error read src");
         return EXIT_FAILURE;
@@ -42,7 +42,6 @@ int reading_header(char *nom, bmp_t *bitmap)
            bitmap->file_size,
            bitmap->width, bitmap->height,
            bitmap->compression ? "C'est" : "Ce n'est pas");
-
     close(fichier); // On ferme le fichier.
     return EXIT_SUCCESS;
 }
@@ -54,7 +53,7 @@ int main(int argc, char **argv)
     int p_green[2];
     int p_blue[2];
     bmp_t bitmap;
-    if (pipe(p) == -1 || pipe(p_red) == -1 || pipe(p_green) == -1 || pipe(p_blue) == -1) // On ouvre crée les pipe.
+    if (pipe(p) == -1 || pipe(p_red) == -1 || pipe(p_green) == -1 || pipe(p_blue) == -1) // On ouvre les tubes.
     {
         fprintf(stderr, "Erreur lors de l'ouverture du tube.\n)");
         return EXIT_FAILURE;
@@ -67,7 +66,7 @@ int main(int argc, char **argv)
     if (file_exists(argv[1]))
     {
         printf("Le fichier existe !\n");
-        if (reading_header(argv[1], &bitmap) == EXIT_FAILURE)
+        if (reading_header(argv[1], &bitmap) == EXIT_FAILURE) // On lance la lecture de l'entête.
         {
             return EXIT_FAILURE;
         }
@@ -77,22 +76,23 @@ int main(int argc, char **argv)
         perror("Error no file");
         return EXIT_FAILURE;
     }
-    pid_t ret = fork();
+    pid_t ret = fork(); // On crée un fils.
     if (ret == -1)
     {
-        perror("Création impossible !");
+        perror("Error create");
         return EXIT_FAILURE;
     }
     else if (ret == 0)
     {
         // On est dans le fils gris
+        printf("Fils créé (gris).\n");
         char offset[10];
         sprintf(offset, "%i", bitmap.bitmap_offset);
         char nomTube0[10];
         sprintf(nomTube0, "%i", p[0]);
         char nomTube1[10];
         sprintf(nomTube1, "%i", p[1]);
-        sleep(2);
+        // On transmet la taille de l'offset et le tube au recouvrant.
         execl("./covering", "covering", nomTube0, nomTube1, offset, "N", argv[2], NULL);
         perror("Error execl");
         return EXIT_FAILURE;
@@ -108,13 +108,13 @@ int main(int argc, char **argv)
         else if (ret2 == 0)
         {
             // On est dans le fils rouge
+            printf("Fils créé (rouge).\n");
             char offset[10];
             sprintf(offset, "%i", bitmap.bitmap_offset);
             char nomTube0[10];
             sprintf(nomTube0, "%i", p_red[0]);
             char nomTube1[10];
             sprintf(nomTube1, "%i", p_red[1]);
-            sleep(2);
             execl("./covering", "covering", nomTube0, nomTube1, offset, "R", argv[2], NULL);
             perror("Error execl");
             return EXIT_FAILURE;
@@ -130,13 +130,13 @@ int main(int argc, char **argv)
             else if (ret3 == 0)
             {
                 // On est dans le fils vert
+                printf("Fils créé (vert).\n");
                 char offset[10];
                 sprintf(offset, "%i", bitmap.bitmap_offset);
                 char nomTube0[10];
                 sprintf(nomTube0, "%i", p_green[0]);
                 char nomTube1[10];
                 sprintf(nomTube1, "%i", p_green[1]);
-                sleep(2);
                 execl("./covering", "covering", nomTube0, nomTube1, offset, "G", argv[2], NULL);
                 perror("Error execl");
                 return EXIT_FAILURE;
@@ -152,24 +152,25 @@ int main(int argc, char **argv)
                 else if (ret4 == 0)
                 {
                     // On est dans le fils bleu
+                    printf("Fils créé (bleu).\n");
                     char offset[10];
                     sprintf(offset, "%i", bitmap.bitmap_offset);
                     char nomTube0[10];
                     sprintf(nomTube0, "%i", p_blue[0]);
                     char nomTube1[10];
                     sprintf(nomTube1, "%i", p_blue[1]);
-                    sleep(2);
                     execl("./covering", "covering", nomTube0, nomTube1, offset, "B", argv[2], NULL);
                     perror("Error execl");
                     return EXIT_FAILURE;
                 }
                 else
                 {
+                    // On est dans le père
+                    // On ferme la lecture des tubes
                     close(p[0]);
                     close(p_red[0]);
                     close(p_green[0]);
                     close(p_blue[0]);
-                    // On est dans le père
                     if (bitmap.bits_per_pixel == 24)
                     {
                         // On ouvre le fichier à recopier.
@@ -179,7 +180,6 @@ int main(int argc, char **argv)
                             perror("Error open src");
                             return EXIT_FAILURE;
                         }
-
                         // On ouvre/crée le fichier cible du recopiage.
                         int dst = open(argv[2], O_WRONLY | O_CREAT | O_TRUNC, S_IRWXU);
                         if (dst == -1)
@@ -187,16 +187,19 @@ int main(int argc, char **argv)
                             perror("Error open dst");
                             return EXIT_FAILURE;
                         }
-                        // On effectue le recopiage.
+                        printf("Lecture de l'entête réussie !\n");
+                        // On effectue les recopiages (copie et tubes).
                         char temp_char;
                         while (read(fichier, &temp_char, sizeof(char)) > 0)
                         {
-                            if (write(dst, &temp_char, sizeof(char)) == -1 || write(p[1], &temp_char, sizeof(char)) == -1 || write(p_red[1], &temp_char, sizeof(char)) == -1 || write(p_green[1], &temp_char, sizeof(char)) == -1 || write(p_blue[1], &temp_char, sizeof(char)) == -1)
+                            if (write(dst, &temp_char, sizeof(char)) != 1 || write(p[1], &temp_char, sizeof(char)) != 1 || write(p_red[1], &temp_char, sizeof(char)) == -1 || write(p_green[1], &temp_char, sizeof(char)) != 1 || write(p_blue[1], &temp_char, sizeof(char)) != 1)
                             {
-                                perror("Error write pipe");
+                                perror("Error copy");
                                 return EXIT_FAILURE;
                             }
                         }
+                        printf("Écriture dans la copie et dans les tubes réussie !\n");
+                        // On ferme l'écriture des tubes.
                         close(p[1]);
                         close(p_red[1]);
                         close(p_green[1]);
@@ -205,16 +208,17 @@ int main(int argc, char **argv)
                         // On ferme les fichiers.
                         close(fichier);
                         close(dst);
-                        return EXIT_SUCCESS;
                     }
                     else
                     {
-                        printf("Il n'y a pas 24 bits par pixel, traitement impossible.");
+                        fprintf(stderr, "Il n'y a pas 24 bits par pixel, traitement impossible.");
                         return EXIT_FAILURE;
                     }
                 }
             }
         }
     }
+    printf("Traitement terminé, aucun problème rencontré !\n");
+    fflush(stdout);
     return EXIT_SUCCESS;
 }
